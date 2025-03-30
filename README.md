@@ -13,8 +13,6 @@ This exists as an alternative to other text data formats, such as Comma-Separate
 
 # Introduction
 
-## Purpose
-
 Delimited text-based tabular-data formats, such as comma-separated values (CSV) or tab-separated values (TSV), or other structures such as JSON-Lines (JSON-L) are ubiquitous for sharing of structured, tabular data. Text-based formats have many advantages over spreadsheet formats or binary formats, in that they do not require specialised tools to view, are easy to read in text editors and terminal environments, and are (relatively) easy to parse programatically.
 
 However, formats that used hierarchical data structures (eg. JSON) may not be suitable for tabular data or may not be easy for humans to read (eg. XML). Additionally, the use of common characters for delimiters causes issues with escaping, especially in instances where there is no formal specification for quoting or escaping. This is especially difficult with CSVs, where there are no formal rules for treating quotes or commas, and different processors may parse these differently. 
@@ -48,64 +46,148 @@ The ASCII character set has for a long time included data delimiters for structu
 ### Terminology
 
 * annotations - details about data
-* Group separator - Unicode U+001D or ASCII Control Code 29
-* Record separator - Unicode U+001E or ASCII Control Code 30
-* Unit separator - Unicode U+001F or ASCII Control Code 31
 
-# Logical structure
+## Reserved ASCII/Unicode Characters
 
-File has heading
-File can have tables
-tables have rows
-rows have cells
+### Reserved characters
+
+* Data Link Escape - DLE - Unicode U+0010 or ASCII Control Code 16
+* End of Transmission Block - ETB - Unicode U+001F or ASCII Control Code 23
+* Group Separator - GS - Unicode U+001D or ASCII Control Code 29
+* Record separator - RS -  Unicode U+001E or ASCII Control Code 30
+* Unit separator - US - Unicode U+001F or ASCII Control Code 31
+
+### Reserved for future use
+* Start of Header - SOH - Unicode U+0001 or ASCII Control Code 1
+* Shift Out - SO - Unicode U+000E or ASCII Control Code 14
+* Shift In - SI - Unicode U+000F or ASCII Control Code 15
+* Escape - ESC - Unicode U+001B or ASCII Control Code 27
+* File Separator - FS - Unicode U+001C ASCII Control Code 28 
 
 # File format
 
-USV files MUST be encoded as either UTF-8 or ASCII, however for interoperability UTF-8 is preferred.
+USV files MUST be encoded as either UTF-8 or ASCII, however for interoperability UTF-8 is recommended.
 
-# File annotations
+## Escaping of characters
+
+Any reserved character may be escaped using the **Data Link Escape** character, conforming software then must treat the single following character as data.
 
 # Data table structure
 
-## Tables (Groups)
+## Groups
 
-### Starting a table
+A table is a data structure that consists of collections of observations of data.
+It is analogous to a table of that contains rows of cells.
 
-### Ending a table
+### Opening a group
 
-A Table MUST be closed under one of the following three conditions
-1. End of File - when a file is terminated the table is interpretted as ended, and the unit, record and group are al terminated.
-2. New Group Separator 
-3. U+0017	
+A data table is opened via the **Group Separator** character.
+Software implementing the USV Specification MUST interpret an unescaped **Group Separator** as opening a table.
 
-### Presentation
+### Closing a group
+
+A Group MUST be closed under one of the following three conditions:
+
+1. End of File - During streaming, when the end of file is reached the table MUST be interpretted as completed, and the unit, record and group are all terminated.
+2. New **Group Separator** - During streaming, when an unescaped **Group Separator** is encountered, the current group MUST be interpretted as completed, and the unit, record and group are all terminated, with a new Group started.
+3. End of Transmission Block (ETB) character (U+0017 or ASCII Control Code 23) - During streaming, when an unescaped **Group Separator** is encountered, the current  group MUST be interpretted as completed, and the unit, record and group are all terminated, with a new Group started.
+
+For data integrity, it is encouraged that the last group in a file SHOULD be terminated with an End of Transmission Block. Absence of an ETB at the end of file MUST not be interpreted as a truncated file, but data users should consider it work checking.
+
+Software implementing the USV Specification MUST include a "safe close" option when writing USV files, that closes each group with an End of Transmission character. Software implementing the USV must include a "safe close check" option that verifies if the final group has been safely closed.
 
 ## Records
 
-### Starting a row
+A record is a collection of data points that relate to an observation. It is analogous to a row within a table that contains data.
 
-### Ending a row
+### Opening a record
+
+A record is opened via the **Record Separator** character.
+Software implementing the USV Specification MUST interpret an unescaped **Record Separator** as opening a record.
+
+### Closing a record
+
+A Record MUST be closed under one of the following two conditions:
+
+1. New **Record Separator** - During streaming, when an unescaped **Reecord Separator** is encountered, the current record MUST be interpretted as completed, and the unit and record are all terminated, with a new Record started.
+2. Any condition that closes a group
 
 ### Presentation
+
+Each record SHOULD be presented on its own line within a user interface. For example a row within a spreadsheet or a line within a text editor.
 
 ## Unit
 
-### Starting a record
+A unit a logical object that contains single data value (or datum). It is analogous to a cell within a row of a table that contains data.
 
-### Ending a record
+A unit can contain any non-reserved character, or any escaped reserved character, including whitespace or new lines.
+
+### Opening a unit
+
+A unit is opened via the **Unit Separator** character.
+Software implementing the USV Specification MUST interpret an unescaped **Unit Separator** as opening a table.
+
+### Closing a unit
+
+A Unit MUST be closed under one of the following two conditions:
+
+1. New **Unit Separator** - During streaming, when an unescaped **Unit Separator** is encountered, the current unit MUST be interpretted as completed, and the unit is terminated, with a new Unit started.
+2. Any condition that closes a record or a group
 
 ### Presentation
 
-# Embedded USVs
+Each unit SHOULD be presented within a single line, with a fixed width within a user interface. For example a cell within a spreadsheet or a fixed-width within a text editor. If user interface folding is supported, cells longer than a configured value SHOULD be presented as truncated until unfolded.
+
+# Formal grammar
+
+The ABNF grammar [2] appears as follows:
+
+    file = *(TEXTDATA / group)
+
+    group = groupannotation groupdata [ groupterminators ]
+    groupannotation = TEXTDATA
+    groupdata = 1*(RS record)
+    groupterminators = ETB
+
+    record = 1*(US unit)
+    unit = (TEXTDATA / eGS / eRS / eUS)
+
+    eGS = DLE GS ; Escaped Group Separator
+    eRS = DLE RS ; Escaped Record Separator
+    eUS = DLE US ; Escaped Unit Separator
+
+    TEXTDATA =  %x20-21 / %x23-2B / %x2D-7E
+
+    SOH = %x01 ; Start of Header
+    DLE = %x10 ; Data Link Escape
+    ETB = %x1F ; End of Transmission
+    GS  = %x1D ; Group Separator
+    RS  = %x1E ; Record separator
+    US  = %x1F ; Unit separator
+
+ABNF Validated using: https://author-tools.ietf.org/abnf
+
+# USV Metadata
+
+* File
+ Starting Positions: list 
+
+* Groups
+ Starting Position
+ MD5 Hash
+ Num Rows
 
 
 ## Examples
 
 
-# Reserved Characters
 
-* File Separator - Unicode U+001C ASCII Control Code 28 
-* 
+# References
+
+## Normative References
+
+* Crocker, D. and P. Overell, "Augmented BNF for Syntax Specifications: ABNF", RFC 2234, November 1997.
+
 
 # Notes:
 
