@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "pyusv"
+version = "0.1.0"
+description = ""
+authors = ["Samuel Spencer <theodore.therone@gmail.com>"]
+license = "GPL v3"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
