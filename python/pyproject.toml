@@ -7,7 +7,9 @@ license = "GPL v3"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.9"
+pyparsing = "^3.2.3"
+abnf = "^2.3.1"
 
 
 [build-system]

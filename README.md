@@ -142,28 +142,33 @@ Each unit SHOULD be presented within a single line, with a fixed width within a 
 
 The ABNF grammar [2] appears as follows:
 
-    file = *(TEXTDATA / group)
+    file = *(textsection / group)
+    textsection = *TEXTDATA
 
-    group = groupannotation groupdata [ groupterminators ]
-    groupannotation = TEXTDATA
-    groupdata = 1*(RS record)
+    group = GS [ groupannotation ] groupdata [ groupterminators ]
+    groupannotation = *TEXTDATA
+    groupdata = 1*(*CRLF RS *CRLF record)
     groupterminators = ETB
 
     record = 1*(US unit)
-    unit = (TEXTDATA / eGS / eRS / eUS)
+    unit = *(TEXTDATA)
 
     eGS = DLE GS ; Escaped Group Separator
     eRS = DLE RS ; Escaped Record Separator
     eUS = DLE US ; Escaped Unit Separator
 
-    TEXTDATA =  %x20-21 / %x23-2B / %x2D-7E
+    TEXTDATA =  %x0A-0B / %x20-21 / %x23-2B / %x2D-7E
 
     SOH = %x01 ; Start of Header
     DLE = %x10 ; Data Link Escape
-    ETB = %x1F ; End of Transmission
+    ETB = %x17 ; End of Transmission
     GS  = %x1D ; Group Separator
     RS  = %x1E ; Record separator
     US  = %x1F ; Unit separator
+
+    CR = %x0D ;as per section 6.1 of RFC 2234
+    LF = %x0A ;as per section 6.1 of RFC 2234
+    CRLF = CR / LF / (CR RF) ;as per section 6.1 of RFC 2234
 
 ABNF Validated using: https://author-tools.ietf.org/abnf
 
@@ -184,9 +189,46 @@ ABNF Validated using: https://author-tools.ietf.org/abnf
 
 # References
 
+## Inspiration
+https://news.ycombinator.com/item?id=43484382
+
 ## Normative References
 
 * Crocker, D. and P. Overell, "Augmented BNF for Syntax Specifications: ABNF", RFC 2234, November 1997.
+
+
+# Editor support
+
+## VS Code
+
+    keybindings.json
+
+    [
+        {
+            "key": "ctrl+shift+g",
+            "command": "type",
+            "args": {
+                "text": "\u001D"
+            },
+            "when": "editorTextFocus"
+        },
+        {
+            "key": "ctrl+shift+r",
+            "command": "type",
+            "args": {
+                "text": "\u001E"
+            },
+            "when": "editorTextFocus"
+        },
+        {
+            "key": "ctrl+shift+u",
+            "command": "type",
+            "args": {
+                "text": "\u001F"
+            },
+            "when": "editorTextFocus"
+        }
+    ]
 
 
 # Notes:
