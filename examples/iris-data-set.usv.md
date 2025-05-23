@@ -9,10 +9,6 @@ It is sometimes called Anderson's Iris data set because Edgar Anderson
 collected the data to quantify the morphologic variation of Iris flowers of 
 three related species.
 
-Two of the three species were collected in the Gaspé Peninsula "all from the 
-same pasture, and picked on the same day and measured at the same time by the 
-same person with the same apparatus".
-
 ## Academic use
 
 The iris data set is widely used as a beginner's dataset for machine learning 

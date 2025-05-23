@@ -52,7 +52,7 @@ The ASCII character set has for a long time included data delimiters for structu
 ### Reserved characters
 
 * Data Link Escape - DLE - Unicode U+0010 or ASCII Control Code 16
-* End of Transmission Block - ETB - Unicode U+001F or ASCII Control Code 23
+* End of Transmission Block - ETB - Unicode U+0017 or ASCII Control Code 23
 * Group Separator - GS - Unicode U+001D or ASCII Control Code 29
 * Record separator - RS -  Unicode U+001E or ASCII Control Code 30
 * Unit separator - US - Unicode U+001F or ASCII Control Code 31
@@ -92,9 +92,9 @@ A Group MUST be closed under one of the following three conditions:
 2. New **Group Separator** - During streaming, when an unescaped **Group Separator** is encountered, the current group MUST be interpretted as completed, and the unit, record and group are all terminated, with a new Group started.
 3. End of Transmission Block (ETB) character (U+0017 or ASCII Control Code 23) - During streaming, when an unescaped **Group Separator** is encountered, the current  group MUST be interpretted as completed, and the unit, record and group are all terminated, with a new Group started.
 
-For data integrity, it is encouraged that the last group in a file SHOULD be terminated with an End of Transmission Block. Absence of an ETB at the end of file MUST not be interpreted as a truncated file, but data users should consider it work checking.
+For data integrity, it is encouraged that the last group in a file SHOULD be terminated with an End of Transmission Block. Absence of an ETB at the end of file MUST not be interpreted as a truncated file, but data users should consider it worth checking.
 
-Software implementing the USV Specification MUST include a "safe close" option when writing USV files, that closes each group with an End of Transmission character. Software implementing the USV must include a "safe close check" option that verifies if the final group has been safely closed.
+Software implementing the USV Specification MAY include a "safe close" option when writing USV files, that closes the final group with an End of Transmission character. Software implementing the USV must include a "safe close check" option that verifies if the final group has been safely closed.
 
 ## Records
 
@@ -157,7 +157,7 @@ The ABNF grammar [2] appears as follows:
     eRS = DLE RS ; Escaped Record Separator
     eUS = DLE US ; Escaped Unit Separator
 
-    TEXTDATA =  %x0A-0B / %x20-21 / %x23-2B / %x2D-7E
+    TEXTDATA =  %x0A-0B / %x20-7E
 
     SOH = %x01 ; Start of Header
     DLE = %x10 ; Data Link Escape
@@ -178,19 +178,47 @@ ABNF Validated using: https://author-tools.ietf.org/abnf
  Starting Positions: list 
 
 * Groups
- Starting Position
+ Name
  MD5 Hash
- Num Rows
+ Records
 
 
 ## Examples
+The following text block contains an example USV file highlighting how markdown and USV can be within the same file.
 
+    # Fisher's Iris data set
 
+    The Iris flower data set or Fisher's Iris data set is a 
+    multivariate data set used and made famous by the British 
+    statistician and biologist Ronald Fisher in his 1936 paper 
+    'The use of multiple measurements in taxonomic problems as 
+    an example of linear discriminant analysis'.
+
+    ---
+
+    
+    This group contains the first 3 rows of the Fisher data set
+    Dataset orderSepal lengthSepal widthPetal lengthPetal widthSpecies
+    15.13.51.40.2I. setosa
+    24.93.01.40.2I. setosa
+    1505.93.05.11.8I. virginica
+
+    
+    This group contains the last 3 rows of the Fisher data set
+    Dataset orderSepal lengthSepal widthPetal lengthPetal widthSpecies
+    1486.53.05.22.0I. virginica
+    1496.23.45.42.3I. virginica
+    1505.93.05.11.8I. virginica
 
 # References
 
 ## Inspiration
-https://news.ycombinator.com/item?id=43484382
+* https://news.ycombinator.com/item?id=43484382
+
+## Prior art
+* https://github.com/SixArm/usv
+* https://github.com/emdonahue/asv
+* https://www.ietf.org/archive/id/draft-unicode-separated-values-00.html
 
 ## Normative References
 
@@ -199,9 +227,27 @@ https://news.ycombinator.com/item?id=43484382
 
 # Editor support
 
+Currently, editor support is limited to visual representation of control characters using the [Unicode Control Pictures characters](https://en.wikipedia.org/wiki/Unicode_control_characters#Control_pictures).
+However, future implementations may include rendering or folding of cells.
+
+For consistency, the following bindings are recommended, but are user preference:
+
+* `ctrl`+`shift`+`g:`  Group Separator
+* `ctrl`+`shift`+`r:`  Record Separator
+* `ctrl`+`shift`+`u:`  Unit Separator
+* `ctrl`+`shift`+`e:`  End of Transmission
+
+## Sublime Text
+
+[Sublime Text supports the addition of custom keybindings](https://www.sublimetext.com/docs/key_bindings.html),
+allowing for control character to be easily inserted.
+
 ## VS Code
 
-    keybindings.json
+[VS Code supports the addition of custom keybindings](https://code.visualstudio.com/docs/configure/keybindings#_advanced-customization),
+allowing for control character to be easily inserted.
+
+To do this, add the following to `keybindings.json`:
 
     [
         {
@@ -225,6 +271,14 @@ https://news.ycombinator.com/item?id=43484382
             "command": "type",
             "args": {
                 "text": "\u001F"
+            },
+            "when": "editorTextFocus"
+        },
+        {
+            "key": "ctrl+shift+e",
+            "command": "type",
+            "args": {
+                "text": "\u0017"
             },
             "when": "editorTextFocus"
         }

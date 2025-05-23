@@ -1,85 +1,213 @@
-from pyparsing import Word, alphas
+import abnf
 import sys
+import asyncio
+import typing
+from dataclasses import dataclass
 
-data = """
-# Fisher's Iris data set
+GS  = "\x1D" # Group Separator
+RS  = "\x1E" # Record separator
+US  = "\x1F" # Unit separator
+ETB  = "\x17" # Unit separator
+GS_DISPLAY  = "\u241D" # Group Separator Display Character
+RS_DISPLAY  = "\u241E" # Record separator Display Character
+US_DISPLAY  = "\u241F" # Unit separator Display Character
 
-The Iris flower data set or Fisher's Iris data set is a multivariate data set 
-used and made famous by the British statistician and biologist Ronald Fisher 
-in his 1936 paper The use of multiple measurements in taxonomic problems as an 
-example of linear discriminant analysis.
-
----
-
-
-Dataset orderSepal lengthSepal widthPetal lengthPetal widthSpecies
-15.13.51.40.2I. setosa
-24.93.01.40.2I. setosa
-
-1505.93.05.11.8I. virginica
-"""
-
-
-sdata = """
-# Fisher's Iris data set
-
-
-Dataset orderSepal lengthSepal widthPetal lengthPetal widthSpecies
-15.13.51.40.2I. setosa
-24.93.01.40.2I. setosa
-
-1505.93.05.11.8I. virginica
-"""
 
 def usv_format():
-    import pyparsing as pp
-    from pyparsing import Word, Literal, alphas8bit, OneOrMore, ZeroOrMore, Optional, unicode, Group, Regex
-
-    unicodeEverything = u''.join(chr(c) for c in range(sys.maxunicode))
-
-    # TEXTDATA =  Word(alphas) # %x20-21 / %x23-2B / %x2D-7E
-
-    SOH = Literal("\x01") # Start of Header
-    DLE = Literal("\x10") # Data Link Escape
-    ETB = Literal("\x17") # End of Transmission
-    GS  = Literal("\x1D") # Group Separator
-    RS  = Literal("\x1E") # Record separator
-    US  = Literal("\x1F") # Unit separator
-
-    reservedchars = (GS, RS, US, ETB, DLE, SOH)
-
-    CR = Literal("\x0D")
-    LF = Literal("\x0A")
-    CRLF = (CR + LF) # as per section 6.1 of RFC 2234
- 
-    eGS = (DLE + GS) # Escaped Group Separator
-    eRS = (DLE + RS) # Escaped Record Separator
-    eUS = (DLE + US) # Escaped Unit Separator
-
-    TEXTDATA =  Word(unicode.printables+" ", exclude_chars=reservedchars)
-    # TEXTDATA =  Regex(r"[^\x01\x10\x17\x1d\x1e\x1f]*?")
-
-    unit = (TEXTDATA) # | eGS | eRS | eUS)
-
-    record = Group(OneOrMore((US | unit)))
-
-    groupannotation = TEXTDATA
-    groupdata = Group(OneOrMore(RS + record))
-    groupterminators = ETB
-
-    group = Group(GS + Optional(groupannotation).set_results_name('preamble') + groupdata.set_results_name('data') + Optional(groupterminators))
-
-    file = Group(ZeroOrMore(
-        TEXTDATA.set_results_name('preamble') ^ group.set_results_name('group')
-    )).set_results_name('file')
-
-    return file
+    class USVRule(abnf.Rule):
+        first_match_alternation = False
+        
+    USVRule.from_file('./usv.abnf')
+    return USVRule("file")
 
 
-parser = usv_format()
-from pprint import pprint
-pprint(parser.parse_string(sdata).as_dict())
+@dataclass
+class Group:    
+    annotation: str = ""
+    records: list[list] = list
 
-greet = Word(alphas) + "," + Word(alphas) + "!"
-hello = "Hello, World!"
-print(hello, "->", greet.parse_string(hello))
+    def __str__(self):
+        def record_str(record):
+            return f"".join([f"{US}"+str(unit) for unit in record])
+
+        output = f"{GS}"
+        output += self.annotation
+        output += "".join(
+            [f"{RS}\n" + record_str(record) for record in self.records]
+        )
+        output += f"{ETB}"
+        return output
+
+    def to_csv(self):
+        def record_str(record):
+            return f",".join([f'"{unit}"' for unit in record])
+
+        output = "".join(
+            [record_str(record)+"\n" for record in self.records]
+        )
+        return output
+
+    def to_display(self):
+        def record_str(record):
+            return f"".join([f"{US_DISPLAY}"+str(unit) for unit in record])
+
+        output = self.annotation
+        output += f"{RS_DISPLAY}"
+        output += "".join(
+            [f"{RS_DISPLAY}\n" + record_str(record) for record in self.records]
+        )
+        return output
+
+    def __eq__(self, other):
+        return (
+            (self.annotation == other.annotation) &
+            (self.records == other.records)
+        )
+
+@dataclass
+class Annotation:    
+    text: str
+
+    def __str__(self):
+        return self.text
+
+    def __eq__(self, other):
+        return self.text == other.text
+
+class BetterParseError(abnf.parser.ParseError):
+    def __init__(self, parser: abnf.parser.Parser, start: int, text: str, *args: typing.Any):
+        super().__init__(parser, start, *args)
+        self.text = text
+
+    def __str__(self):
+        pos = self.start
+        lines = self.text.split("\n")
+        line = None
+        for i, line in enumerate(lines):
+            print(pos, len(line))
+            if pos < len(line):
+                break
+            else:
+                pos -= len(line)
+
+        txt = f"{self.parser!s}: {self.start}" 
+        txt += f"\nError occurred on line {i+1} at position {pos}: "
+        txt += f"\n{line}"
+        txt += "\n" + " "*pos + "^"
+        return txt
+
+
+class USVReader:
+    data: list = [] 
+
+    def parse(self, text):
+        try:
+            return usv_format().parse_all(text)
+        except abnf.parser.ParseError as e:
+            raise BetterParseError(e.parser, e.start, text, *e.args)
+
+    def __init__(self, text, strict=False):
+
+        if strict:
+            node = self.parse(text)
+            self.data = asyncio.run(self.process_node(node))
+        else:
+            self.data = self.streaming_parse(text)
+
+        self.groups = [
+            obj
+            for obj in self.data
+            if isinstance(obj, Group)
+        ]
+    
+    def streaming_parse(self, text):
+        import re
+        x = re.match(
+            f"^([^{GS}{ETB}]*|{GS}.*{ETB}?)*$",
+            text
+        )
+        for i in text:
+            if i == GS:
+                print("new group")
+            if i == RS:
+                print("new record")
+            if i == RS:
+                print("new unit")
+        print(text)
+        print(x.groups(31))
+        return []
+
+    async def process_node(self, node):
+        if node.name == "file":
+            return [
+                await self.process_node(child)
+                for child in node.children
+            ]
+        elif node.name == "annotation":
+            return Annotation(text="".join([
+                await self.process_node(child)
+                for child in node.children
+            ]))
+        elif node.name == "group":
+            group = {}
+            for child in node.children:
+                if child.name == "groupannotation":
+                    group['annotation'] = await self.process_node(child)
+                elif child.name == "groupdata":
+                    group['records'] =  [
+                        await self.process_node(grandchild)
+                        for grandchild in child.children
+                    ]
+            return Group(**group)
+        elif node.name == "record":
+            return [
+                await self.process_node(child)
+                for child in node.children
+                if child.name == "unit"
+            ]
+        elif node.name == "unit":
+            for child in node.children:
+                if child.name == "TEXTDATA":
+                    return await self.process_node(child)
+        elif node.name == "groupannotation":
+            # Get first text element
+            return await self.process_node(node.children[0])
+        elif node.name == "TEXTDATA":
+            return "".join([
+                character.value for character in node.children
+            ])
+        else:
+            return None
+
+    def __str__(self):
+        return "".join([str(obj) for obj in self.data])
+
+    def insert(self, pos, obj):
+        # Insert an appropriate child object at position pos
+        assert isinstance(obj, (Group, Annotation))
+        self.data.insert(pos, obj)
+
+    def normalised_data(self):
+        # Useful for testing as concurrent annotations on parsing will be seen as one.
+        
+        children = []
+        last_child = None
+        for child in self.data:
+            if last_child and  isinstance(last_child, Annotation) and isinstance(child, Annotation):
+                last_child.text += child.text
+            else:
+                children.append(child)
+            last_child = child
+        return children
+
+    def __eq__(self, other):
+        return all(
+            us == them
+            for us, them in zip(self.normalised_data(), other.normalised_data())
+        )
+
+    @classmethod
+    def from_file(cls, filename):
+        with open(filename) as f:
+            src = f.read()
+        return cls(src)
